@@ -6,6 +6,8 @@ Built this to scratch an itch: most linters are static rule engines. I wanted so
 
 **Author:** Bradley R. Kinnard
 
+**Follow me on Linkedin: ** https://www.linkedin.com/in/brad-kinnard/
+
 ![Code Style Enforcer UI](src/backend/docs/images/code-style-enforcer-ui.png)
 
 Left side is your code editor. Right side shows agent trust levels (the bars) and suggestions grouped by how bad they are. The "Learning Activity" panel at the bottom right is the interesting part, it shows weight changes happening live as you accept/reject stuff.
