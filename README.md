@@ -6,7 +6,7 @@ Built this to scratch an itch: most linters are static rule engines. I wanted so
 
 **Author:** Bradley R. Kinnard
 
-![Code Style Enforcer UI](docs/images/code-style-enforcer.png)
+![Code Style Enforcer UI](src/backend/docs/images/code-style-enforcer-ui.png)
 
 Left side is your code editor. Right side shows agent trust levels (the bars) and suggestions grouped by how bad they are. The "Learning Activity" panel at the bottom right is the interesting part, it shows weight changes happening live as you accept/reject stuff.
 
@@ -59,7 +59,7 @@ This is the actual point of the project.
 
 When you click Accept or Reject on a suggestion, that feedback goes into a queue. A background worker picks it up and adjusts that agent's weight. Accept something good? Agent gets +0.250 trust. Reject something dumb? Only -0.050. Asymmetric on purpose, don't want to punish agents too hard for occasional misses.
 
-![Terminal Output](docs/images/terminal-output.png)
+![Terminal Output](src/backend/docs/images/terminal-output.png)
 
 Those `[redis] updated X weight` lines are the proof. Each one is a real write to Redis. The weights persist, so if you restart the server tomorrow your agents still remember what you liked.
 
@@ -74,7 +74,7 @@ Weights stay between 0.1 and 2.0. An agent you keep rejecting will eventually ha
 
 ## Architecture
 
-![Architecture Diagram](src/backend/docs/images/mermaid-diagram.svg)
+<img src="src/backend/docs/images/mermaid-diagram.svg" width="400" alt="Architecture Diagram">
 
 Code comes in, gets sent to all 5 agents at once (async). Results merge together, weighted by how much we trust each agent. Frontend shows suggestions. You click. Feedback queues up. Worker processes it. Weights update in Redis (or DynamoDB in prod). Next analysis uses the new weights. Loop.
 
