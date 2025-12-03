@@ -1,6 +1,10 @@
 # Author: Bradley R. Kinnard — x, y, z are not variable names
 
-"""Naming agent. Variables, functions, classes, constants. Make them readable."""
+"""
+Naming agent. Complains about bad variable names, misleading function names,
+inconsistent casing. Won't go higher than severity 4 because naming alone
+doesn't break production (usually).
+"""
 
 import json
 import time
@@ -10,22 +14,21 @@ from src.backend.agents.base_agent import BaseAgent
 from src.backend.adapters.llm_client import chat_json
 from src.backend.core.models import AgentResult, Suggestion
 
-# severity 5 = CRITICAL, 4 = ERROR, 3 = WARNING, 2 = INFO, 1 = HINT
-SYSTEM = """You are a naming convention analyzer. You MUST respond with valid JSON only.
 
-SEVERITY SCALE: 1=hint, 2=info, 3=warning, 4=error (naming issues cap at 4)
+# prompt lives here so I can tweak it without scrolling through class methods
+NAMING_PROMPT = """Analyze variable/function/class names in this code. Return JSON.
 
-Look for:
-- Actively misleading names (e.g., 'data' that holds a user) → severity 4
-- Single letter variables except i,j,k in loops → severity 3
-- Inconsistent casing (mixing camelCase and snake_case) → severity 3
-- Abbreviations that aren't obvious → severity 2
-- Boolean names that don't read as questions → severity 2
+Bad naming patterns to catch:
+- Misleading names like 'data' when it's actually a User object (sev 4)
+- Single letters outside of loop indices (sev 3)  
+- Mixed casing styles in same file, snake_case vs camelCase (sev 3)
+- Cryptic abbreviations like 'usr_mgr_svc' (sev 2)
+- Booleans that don't read like yes/no questions (sev 2)
 
-Response format:
-{"suggestions": [{"type": "naming-issue-type", "message": "description", "severity": 1-4, "confidence": 0.0-1.0}]}
+Keep severity at 4 max. Naming is annoying but rarely a prod incident.
 
-If naming looks fine, return {"suggestions": []}."""
+JSON format: {"suggestions": [{"type": "...", "message": "...", "severity": 1-4, "confidence": 0.0-1.0}]}
+Empty array if names look fine."""
 
 
 class NamingAgent(BaseAgent):
@@ -34,23 +37,33 @@ class NamingAgent(BaseAgent):
         super().__init__("naming")
 
     async def analyze(self, code: str, language: str) -> AgentResult:
-        t0 = time.perf_counter()
+        start = time.perf_counter()
+
         try:
-            resp = await chat_json(SYSTEM, f"{language} code:\n```\n{code}\n```")
-            raw = json.loads(resp.content)
-            sug = []
-            for s in raw.get("suggestions", []):
-                sug.append(Suggestion(
-                    id=f"nam-{uuid.uuid4().hex[:8]}",
-                    agent=self.name,
-                    type=s.get("type", "naming"),
-                    message=s["message"],
-                    severity=min(4, max(1, s.get("severity", 2))),  # naming caps at 4
-                    confidence=s.get("confidence", 0.75),
-                    score=0.0
-                ))
-            ms = int((time.perf_counter() - t0) * 1000)
-            return self._make_result(sug, ms)
-        except Exception as e:
-            ms = int((time.perf_counter() - t0) * 1000)
-            return self._make_result([], ms, error=str(e))
+            llm_resp = await chat_json(NAMING_PROMPT, f"{language}:\n```\n{code}\n```")
+            parsed = json.loads(llm_resp.content)
+        except Exception as err:
+            elapsed = int((time.perf_counter() - start) * 1000)
+            return self._make_result([], elapsed, error=str(err))
+
+        suggestions = []
+        for item in parsed.get("suggestions", []):
+            # clamp severity: naming issues shouldn't exceed 4
+            sev = item.get("severity", 2)
+            if sev > 4:
+                sev = 4
+            if sev < 1:
+                sev = 1
+
+            suggestions.append(Suggestion(
+                id=f"nam-{uuid.uuid4().hex[:8]}",
+                agent=self.name,
+                type=item.get("type", "naming"),
+                message=item["message"],
+                severity=sev,
+                confidence=item.get("confidence", 0.75),
+                score=0.0
+            ))
+
+        elapsed = int((time.perf_counter() - start) * 1000)
+        return self._make_result(suggestions, elapsed)
